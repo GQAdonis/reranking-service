@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "reranking-service"
+version = "0.1.0"
+description = ""
+authors = ["Travis James <travis@tribehealthsolutions.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"  # Adjust this if you're using a different Python version
+robyn = "0.62.1"
+attrs = "24.2.0"
+python-dotenv = "1.0.1"
+sentence-transformers = "3.2.0"
+numpy = "2.1.2"
+transformers = ">=4.41.0,<5.0.0"
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
