@@ -1,169 +1,73 @@
-# Robyn Reranking Service Setup Guide
+# Reranking Service
 
-This guide will walk you through the process of setting up and running the reranking service using Robyn's project creator CLI and attrs.
+This repository contains a CPU-friendly reranking service designed to improve search result relevance. The service uses a lightweight reranking model to efficiently reorder a list of documents based on their relevance to a given query.
 
-## Prerequisites
+## Purpose
 
-- Python 3.11 or higher
-- pip (Python package installer)
+The main purpose of this service is to provide a fast and efficient way to rerank search results or any list of documents. It's particularly useful in scenarios where:
 
-## Step 1: Install Robyn
+1. You need to improve the relevance of search results without the computational overhead of more complex models.
+2. You want to rerank documents on CPU, making it more accessible and cost-effective for various deployment environments.
+3. You need a reranking solution that can be easily integrated into existing search pipelines or content recommendation systems.
 
-First, install Robyn globally:
+## Key Features
 
-```bash
-pip install robyn
-```
+- CPU-friendly reranking: Optimized for performance on CPU, making it suitable for a wide range of deployment scenarios.
+- FastAPI integration: Uses FastAPI for creating a robust and efficient API service.
+- Customizable model: Allows specifying different reranking models based on your needs.
+- Flexible input/output: Accepts a query and a list of documents, returning reranked results with scores.
 
-## Step 2: Create a new Robyn project
+## Project Structure
 
-Use Robyn's project creator CLI to initialize your project:
+- `app.py`: The main FastAPI application file containing the API endpoints.
+- `cpu_friendly_reranker.py`: Implementation of the CPU-friendly reranking model.
+- `rerank_types.py`: Pydantic models for request/response typing and validation.
+- `requirements.txt`: List of Python dependencies for the project (generated from Poetry for compatibility).
+- `pyproject.toml`: Project metadata and dependencies managed by Poetry.
+- `Dockerfile`: Instructions for building a Docker container for the service.
+- `.dockerignore`: Specifies files and directories to be excluded from the Docker build context.
+- `.env`: Environment variables for the project (not tracked in version control).
 
-```bash
-robyn new reranking-service
-cd reranking-service
-```
+## Setup and Installation
 
-This command creates a new directory with a basic Robyn project structure.
+1. Clone this repository:
+   ```
+   git clone https://github.com/your-username/reranking-service.git
+   cd reranking-service
+   ```
 
-## Step 3: Set up a virtual environment
+2. This project uses Poetry for dependency management. If you don't have Poetry installed, you can install it by following the instructions at https://python-poetry.org/docs/#installation
 
-It's recommended to use a virtual environment:
+3. Install the project dependencies:
+   ```
+   poetry install
+   ```
 
-```bash
-# Create a virtual environment
-python -m venv venv
+4. Activate the virtual environment:
+   ```
+   poetry shell
+   ```
 
-# Activate the virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS and Linux:
-source venv/bin/activate
-```
+5. Set up environment variables:
+   - Copy the `.env.example` file to `.env` (if it exists)
+   - Update the `.env` file with your specific configuration
 
-## Step 4: Install additional required packages
+6. Run the FastAPI server:
+   ```
+   uvicorn app:app --reload
+   ```
 
-Install attrs and your reranker package:
+The service will be available at `http://localhost:8000`.
 
-```bash
-pip install attrs your-reranker-package
-```
+## API Usage
 
-Replace `your-reranker-package` with the actual package name for your reranker implementation.
+### Rerank Endpoint
 
-## Step 5: Modify the main.py file
+**POST** `/v1/rerank`
 
-Open the `main.py` file created by Robyn and replace its contents with our reranking service code:
-
-```python
-from robyn import Robyn, jsonify
-from attrs import define, field
-import attr
-from typing import List
-import json
-import time
-from your_reranker import CPUFriendlyReranker  # Replace with your actual reranker import
-
-app = Robyn(__file__)
-
-@define
-class Document:
-    id: str
-    content: str
-
-@define
-class RerankRequest:
-    query: str
-    documents: List[Document]
-    model: str = field(default="default_model")
-    top_k: int = field(default=5)
-
-@define
-class RankedDocument:
-    id: str
-    score: float
-    original_rank: int
-    new_rank: int
-
-@define
-class RerankResponse:
-    reranked_documents: List[RankedDocument]
-    model_used: str
-    processing_time: float
-
-def validate_rerank_request(data):
-    try:
-        documents = [Document(**doc) for doc in data['documents']]
-        return RerankRequest(
-            query=data['query'],
-            documents=documents,
-            model=data.get('model', 'default_model'),
-            top_k=data.get('top_k', 5)
-        )
-    except (KeyError, TypeError, attr.exceptions.BadArgument) as e:
-        raise ValueError(f"Invalid request data: {str(e)}")
-
-@app.post("/v1/rerank")
-async def rerank(request):
-    try:
-        data = json.loads(request.body)
-        rerank_request = validate_rerank_request(data)
-        
-        reranker = CPUFriendlyReranker(model_name=rerank_request.model)
-        
-        start_time = time.time()
-        reranked = reranker.rerank(rerank_request.query, 
-                                   [attr.asdict(doc) for doc in rerank_request.documents], 
-                                   top_k=rerank_request.top_k)
-        processing_time = time.time() - start_time
-        
-        response = RerankResponse(
-            reranked_documents=[
-                RankedDocument(
-                    id=doc['id'],
-                    score=doc['score'],
-                    original_rank=i,
-                    new_rank=j
-                ) for j, (i, doc) in enumerate(reranked)
-            ],
-            model_used=rerank_request.model,
-            processing_time=processing_time
-        )
-        
-        return jsonify(attr.asdict(response)), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": "Internal server error"}), 500
-
-if __name__ == "__main__":
-    app.start(port=8000)
-```
-
-Make sure to replace `from your_reranker import CPUFriendlyReranker` with the actual import statement for your reranker implementation.
-
-## Step 6: Configure the reranker
-
-If your reranker requires any configuration (e.g., model paths, parameters), set these up according to your specific implementation.
-
-## Step 7: Run the service
-
-Start the reranking service:
-
-```bash
-python app.py
-```
-
-The service should now be running on `http://localhost:8000`.
-
-## Step 8: Test the service
-
-Test the service using curl or any HTTP client:
-
-```bash
-curl -X POST http://localhost:8000/v1/rerank \
--H "Content-Type: application/json" \
--d '{
+Request body:
+```json
+{
   "query": "example search query",
   "documents": [
     {
@@ -176,44 +80,50 @@ curl -X POST http://localhost:8000/v1/rerank \
     }
   ],
   "model": "default_model",
-  "top_k": 2
-}'
+  "top_k": 5
+}
 ```
 
-## Step 9: Integrate with your application
-
-To use this reranking service in your ContentCreationAgent, make HTTP requests to the `/v1/rerank` endpoint:
-
-```python
-import requests
-
-class ContentCreationAgent:
-    def __init__(self, reranker_url):
-        self.reranker_url = reranker_url
-
-    async def rerank_documents(self, query, documents):
-        response = requests.post(
-            f"{self.reranker_url}/v1/rerank",
-            json={
-                "query": query,
-                "documents": documents,
-                "top_k": 5  # Adjust as needed
-            }
-        )
-        response.raise_for_status()
-        return response.json()["reranked_documents"]
-
-    # Use this method in your generate_response method
+Response:
+```json
+{
+  "reranked_documents": [
+    {
+      "id": "doc2",
+      "score": 0.85,
+      "original_rank": 1,
+      "new_rank": 0
+    },
+    {
+      "id": "doc1",
+      "score": 0.75,
+      "original_rank": 0,
+      "new_rank": 1
+    }
+  ],
+  "model_used": "default_model",
+  "processing_time": 0.0123
+}
 ```
 
-## Troubleshooting
+## Docker Support
 
-- If you encounter import errors, ensure all required packages are installed and your virtual environment is activated.
-- If the service fails to start, check that port 8000 is not already in use.
-- For reranker-specific issues, refer to the documentation of your reranker implementation.
+To build and run the service using Docker:
 
-## Next Steps
+1. Build the Docker image:
+   ```
+   docker build -t reranking-service .
+   ```
 
-- Implement proper error handling and logging in the service.
-- Add authentication if the service will be publicly accessible.
-- Consider containerizing the service using Docker for easier deployment.
+2. Run the container:
+   ```
+   docker run -p 8000:8000 reranking-service
+   ```
+
+## Contributing
+
+Contributions to improve the reranking service are welcome. Please feel free to submit issues and pull requests.
+
+## License
+
+[Specify the license under which this project is released]
